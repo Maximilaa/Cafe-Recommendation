@@ -32,7 +32,7 @@ MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 [cite: 754, 788, 828]
 @st.cache_resource
 def load_assets():
     # Definisikan REPO_ID di awal agar bisa dipanggil [cite: 559]
-    REPO_ID = "lattezice/cafe-sentiment-bert"
+    REPO_ID = "lattezice/cafe-sentimen-bert"
     
     # Perbaikan: Tambahkan () pada st.spinner dan perbaiki urutan download
     with st.spinner("Mengunduh aset dari Hugging Face..."):

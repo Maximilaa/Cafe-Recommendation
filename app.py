@@ -32,7 +32,8 @@ MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42
 @st.cache_resource
 def load_assets():
     # Dataset sesuai Tabel 4.1 
-csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
+    with st.spinner
+    csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
     # Download model (Fine-tuned BERT)
     REPO_ID = "lattezice/cafe-sentiment-bert"
     try:

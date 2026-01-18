@@ -17,7 +17,7 @@ from huggingface_hub import hf_hub_download
 # CONFIG
 # =========================
 st.set_page_config(
-    page_title="Coffee Insight AI",
+    page_title="Coffee Recommender",
     layout="wide"
 )
 
@@ -78,7 +78,7 @@ def encode_text(text):
 # =========================
 # UI
 # =========================
-st.title("☕ Coffee Insight AI")
+st.title("☕ Coffee Recommender")
 st.markdown("Sistem Rekomendasi Café Berbasis Embedding & Sentimen")
 
 with st.form("recommender_form"):

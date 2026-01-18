@@ -31,36 +31,38 @@ MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42
 # =========================
 @st.cache_resource
 def load_assets():
-    # Dataset sesuai Tabel 4.1 
-    with st.spinner:
-    csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
-    # Download model (Fine-tuned BERT)
+    # Tentukan REPO_ID di awal
     REPO_ID = "lattezice/cafe-sentiment-bert"
-    try:
-        model_path = hf_hub_download(
-            repo_id=REPO_ID,
-            filename="best_model.pt"
-        )
-    except:
-        # Fallback jika struktur folder di repo berbeda
-        model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
-
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     
-    # Menggunakan BertForSequenceClassification (3 label: Positif, Netral, Negatif) [cite: 801, 816]
+    # Gunakan st.spinner dengan tanda kurung dan indentasi yang benar
+    with st.spinner("Mengunduh aset dari Hugging Face..."):
+        # 1. Download Dataset CSV [cite: 579, 582]
+        csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
+        df = pd.read_csv(csv_path)
+
+        # 2. Download model (Fine-tuned BERT) [cite: 816, 831]
+        try:
+            model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
+        except:
+            model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
+
+        # 3. Download precomputed assets (.npy) [cite: 880, 894]
+        emb_path = hf_hub_download(repo_id=REPO_ID, filename="cafe_embedding.npy")
+        sent_path = hf_hub_download(repo_id=REPO_ID, filename="sentiment_score.npy")
+        
+        cafe_emb = np.load(emb_path)      
+        sentiment_score = np.load(sent_path)
+
+    # 4. Inisialisasi Model [cite: 816, 883]
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Load state dict dengan safe loading
     state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)
     model.eval()
-
-    # Load precomputed assets (Pastikan file ini ada di folder yang sama)
-    cafe_emb = np.load("cafe_embedding.npy")      
-    sentiment_score = np.load("sentiment_score.npy")  
 
     return df, tokenizer, model, cafe_emb, sentiment_score, device
 

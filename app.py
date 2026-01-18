@@ -44,7 +44,7 @@ def load_assets():
             )
         except:
             # Fallback jika struktur folder di repo berbeda
-            model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
+            model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
     
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     

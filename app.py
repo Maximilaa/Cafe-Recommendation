@@ -21,47 +21,49 @@ st.set_page_config(
     layout="wide"
 )
 
-# Parameter sesuai Bab IV
-ALPHA = 0.7   # Bobot hybrid 
+# Parameter sesuai Bab IV penelitian [cite: 754, 788, 828, 919]
+ALPHA = 0.7   # Bobot hybrid [cite: 919, 938]
 TOP_N = 5
-MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 
+MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 [cite: 754, 788, 828]
 
 # =========================
 # LOAD ASSETS
 # =========================
 @st.cache_resource
 def load_assets():
-    # Dataset sesuai Tabel 4.1 
-    with st.spinner:
+    # Definisikan REPO_ID di awal agar bisa dipanggil [cite: 559]
+    REPO_ID = "lattezice/cafe-sentiment-bert"
+    
+    # Perbaikan: Tambahkan () pada st.spinner dan perbaiki urutan download
+    with st.spinner("Mengunduh aset dari Hugging Face..."):
+        # 1. Download Dataset sesuai Tabel 4.1 [cite: 582, 587]
         csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
         df = pd.read_csv(csv_path)
-        # Download model (Fine-tuned BERT)
-        REPO_ID = "lattezice/cafe-sentiment-bert"
-        try:
-            model_path = hf_hub_download(
-                repo_id=REPO_ID,
-                filename="best_model.pt"
-            )
-        except:
-            # Fallback jika struktur folder di repo berbeda
-            model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
-    
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    
-    # Menggunakan BertForSequenceClassification (3 label: Positif, Netral, Negatif) [cite: 801, 816]
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # 2. Download model (Fine-tuned BERT) [cite: 816, 831]
+        try:
+            model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
+        except:
+            model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
+
+        # 3. Download precomputed assets (.npy) dari Hugging Face [cite: 500, 863]
+        emb_path = hf_hub_download(repo_id=REPO_ID, filename="cafe_embedding.npy")
+        sent_path = hf_hub_download(repo_id=REPO_ID, filename="sentiment_score.npy")
+        
+        cafe_emb = np.load(emb_path)      
+        sentiment_score = np.load(sent_path)
+
+    # 4. Inisialisasi Model Klasifikasi (3 label: Positif, Netral, Negatif) [cite: 801, 816]
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3) [cite: 816, 831]
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") [cite: 544, 545]
     
-    # Load state dict dengan safe loading
+    # Load state dict
     state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)
     model.eval()
-
-    # Load precomputed assets (Pastikan file ini ada di folder yang sama)
-    cafe_emb = np.load("cafe_embedding.npy")      
-    sentiment_score = np.load("sentiment_score.npy")  
 
     return df, tokenizer, model, cafe_emb, sentiment_score, device
 
@@ -86,14 +88,15 @@ def encode_text(text):
     ).to(device)
 
     with torch.no_grad():
-        outputs = model.bert(**inputs) # Mengambil base bert dari classification model
+        # Mengambil base bert dari classification model
+        outputs = model.bert(**inputs) 
         # Mengambil [CLS] token sebagai representasi ulasan [cite: 499, 869]
         emb = outputs.last_hidden_state[:, 0, :]  
 
     return emb.cpu().numpy().flatten()
 
 # =========================
-# UI (UX tetap sama)
+# UI
 # =========================
 st.title("☕ Coffee Recommender")
 st.markdown("Sistem Rekomendasi Café Berbasis Embedding & Sentimen")
@@ -106,9 +109,9 @@ with st.form("recommender_form"):
 
     col1, col2 = st.columns(2)
     with col1:
-        city = st.selectbox("City", sorted(df["city"].dropna().unique()))
+        city = st.selectbox("City", sorted(df["city"].dropna().unique())) [cite: 582, 586]
     with col2:
-        state = st.selectbox("State", sorted(df["state"].dropna().unique()))
+        state = st.selectbox("State", sorted(df["state"].dropna().unique())) [cite: 582, 586]
 
     submitted = st.form_submit_button("Cari Rekomendasi")
 
@@ -123,13 +126,13 @@ if submitted:
             # 1. Encode user preference [cite: 512, 917]
             user_emb = encode_text(user_text).reshape(1, -1)
 
-            # 2. Perhitungan Cosine Similarity [cite: 511, 919]
+            # 2. Perhitungan Cosine Similarity [cite: 272, 511, 906]
             similarity_scores = cosine_similarity(
                 user_emb,
                 cafe_emb_matrix
             )[0]
 
-            # 3. Perhitungan Hybrid Score (Linear Combination) [cite: 919, 921]
+            # 3. Perhitungan Hybrid Score (Linear Combination) [cite: 919]
             # Hybrid Score = (ALPHA * Semantic) + ((1 - ALPHA) * Sentiment)
             hybrid_scores = (
                 ALPHA * similarity_scores
@@ -159,9 +162,8 @@ if submitted:
                     .head(TOP_N)
                 )
 
-                # Output UI
+                # Output UI sesuai Tabel 4.11 [cite: 931, 934]
                 st.subheader("🎯 Rekomendasi Café")
-                # Menampilkan kolom sesuai Tabel 4.11 [cite: 931, 934]
                 display_cols = ["cafe_name", "categories", "cafe_rating", "hybrid_score"]
                 
                 st.dataframe(

@@ -8,83 +8,140 @@ Original file is located at
 import streamlit as st
 import pandas as pd
 import torch
-import os
-from transformers import BertTokenizer, BertForSequenceClassification
-from sklearn.feature_extraction.text import TfidfVectorizer
+import numpy as np
+from transformers import BertTokenizer, BertModel
 from sklearn.metrics.pairwise import cosine_similarity
 from huggingface_hub import hf_hub_download
 
-# --- CONFIG & LOAD ASSETS ---
-st.set_page_config(page_title="Coffee Insight AI", layout="wide")
+# =========================
+# CONFIG
+# =========================
+st.set_page_config(
+    page_title="Coffee Insight AI",
+    layout="wide"
+)
 
+ALPHA = 0.7   # bobot hybrid (sesuai Bab II & IV)
+TOP_N = 5
+
+# =========================
+# LOAD ASSETS
+# =========================
 @st.cache_resource
 def load_assets():
-    # 1. Load Data Bersih
-    df = pd.read_csv('processed_coffee.csv')
+    # dataset hasil preprocessing
+    df = pd.read_csv("processed_coffee.csv")
 
-    # 2. Download model dari Hugging Face secara otomatis
-    # GANTI "username/repo" dengan nama yang kamu buat di Hugging Face tadi
-    REPO_ID = "lattezice/cafe-sentiment-bert" 
-    model_file = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
+    # download model embedding (BERT fine-tuned)
+    REPO_ID = "lattezice/cafe-sentiment-bert"
+    model_path = hf_hub_download(
+        repo_id=REPO_ID,
+        filename="bert_embedding.pt"
+    )
 
-    # 3. Inisialisasi Arsitektur BERT
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3)
+    model = BertModel.from_pretrained("bert-base-uncased")
 
-    # 4. Load bobot model yang sudah didownload
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.load_state_dict(torch.load(model_file, map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.to(device)
     model.eval()
 
-    return df, tokenizer, model
+    # load precomputed cafe profile
+    cafe_emb = np.load("cafe_embedding.npy")      # (n_cafe, 768)
+    sentiment_score = np.load("sentiment_score.npy")  # (n_cafe,)
 
-# --- LOGIKA REKOMENDASI ---
-def get_recs(cafe_name, dataframe):
-    tfidf = TfidfVectorizer(stop_words='english')
-    # Sesuaikan 'categories' dengan nama kolom kategori di datasetmu
-    tfidf_matrix = tfidf.fit_transform(dataframe['categories'].fillna(''))
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+    return df, tokenizer, model, cafe_emb, sentiment_score, device
 
-    idx = dataframe[dataframe['name'] == cafe_name].index[0]
-    sim_scores = list(enumerate(cosine_sim[idx]))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)[1:6]
 
-    return dataframe.iloc[[i[0] for i in sim_scores]]
+df, tokenizer, model, cafe_emb_matrix, sentiment_score_vec, device = load_assets()
 
-# --- UI DESIGN ---
+# =========================
+# HELPER FUNCTION
+# =========================
+def encode_text(text):
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=256
+    ).to(device)
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        emb = outputs.last_hidden_state[:, 0, :]  # CLS token
+
+    return emb.cpu().numpy().flatten()
+
+
+# =========================
+# UI
+# =========================
 st.title("☕ Coffee Insight AI")
-st.markdown("Dashboard Analisis Sentimen & Rekomendasi Pintar")
+st.markdown("Sistem Rekomendasi Café Berbasis Embedding & Sentimen")
 
-tab1, tab2 = st.tabs(["🔍 Cek Sentimen Ulasan", "🎯 Rekomendasi Kafe"])
+with st.form("recommender_form"):
+    user_text = st.text_area(
+        "Preferensi Café (contoh: cozy quiet place for studying)",
+        height=120
+    )
 
-# TAB SENTIMEN
-with tab1:
-    st.subheader("Beri Tahu Kami Pendapatmu")
-    input_text = st.text_area("Tulis ulasan di sini...", height=100)
+    col1, col2 = st.columns(2)
+    with col1:
+        city = st.selectbox("City", sorted(df["city"].dropna().unique()))
+    with col2:
+        state = st.selectbox("State", sorted(df["state"].dropna().unique()))
 
-    if st.button("Analisis"):
-        if input_text:
-            inputs = tokenizer(input_text, return_tensors="pt", truncation=True, padding=True, max_length=320)
-            with torch.no_grad():
-                outputs = model(**inputs)
-                pred = torch.argmax(outputs.logits, dim=-1).item()
+    submitted = st.form_submit_button("Cari Rekomendasi")
 
-            # Sesuaikan label dengan LabelEncoder di notebook-mu
-            mapping = {2: "Negatif 😡", 1: "Netral 😐", 0: "Positif 😍"}
-            st.info(f"Hasil Analisis: **{mapping[pred]}**")
-        else:
-            st.warning("Masukkan ulasan dulu ya!")
+# =========================
+# RECOMMENDATION LOGIC
+# =========================
+if submitted:
+    if user_text.strip() == "":
+        st.warning("Masukkan preferensi café terlebih dahulu.")
+    else:
+        # encode user preference
+        user_emb = encode_text(user_text).reshape(1, -1)
 
-# TAB REKOMENDASI
-with tab2:
-    st.subheader("Cari Kafe yang Mirip")
-    pilihan = st.selectbox("Pilih Kafe yang Kamu Suka:", df['name'].unique())
+        # similarity
+        similarity_scores = cosine_similarity(
+            user_emb,
+            cafe_emb_matrix
+        )[0]
 
-    if st.button("Tampilkan Rekomendasi"):
-        hasil = get_recs(pilihan, df)
-        st.write(f"Berdasarkan **{pilihan}**, kamu mungkin juga suka kafe ini:")
+        # hybrid score
+        hybrid_scores = (
+            ALPHA * similarity_scores
+            + (1 - ALPHA) * sentiment_score_vec
+        )
 
-        for _, row in hasil.iterrows():
-            with st.expander(f"📍 {row['name']} ({row['stars']} ⭐)"):
-                st.write(f"**Kategori:** {row['categories']}")
-                st.write(f"**Lokasi:** {row['city']}")
+        # build result table
+        result_df = df.copy()
+        result_df["similarity_score"] = similarity_scores
+        result_df["sentiment_score"] = sentiment_score_vec
+        result_df["hybrid_score"] = hybrid_scores
+
+        # filter lokasi
+        result_df = result_df[
+            (result_df["city"] == city) &
+            (result_df["state"] == state)
+        ]
+
+        # ranking
+        result_df = (
+            result_df
+            .sort_values("hybrid_score", ascending=False)
+            .drop_duplicates("business_id")
+            .head(TOP_N)
+        )
+
+        # output
+        st.subheader("🎯 Rekomendasi Café")
+        st.dataframe(
+            result_df[
+                ["cafe_name", "cafe_rating", "hybrid_score"]
+            ].reset_index(drop=True)
+        )
+

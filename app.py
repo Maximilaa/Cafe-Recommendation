@@ -39,7 +39,7 @@ def load_assets():
     try:
         model_path = hf_hub_download(
             repo_id=REPO_ID,
-            filename="models/best_model.pt"
+            filename="best_model.pt"
         )
     except:
         # Fallback jika struktur folder di repo berbeda

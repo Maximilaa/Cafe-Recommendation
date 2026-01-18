@@ -36,7 +36,7 @@ def load_assets():
     REPO_ID = "lattezice/cafe-sentiment-bert"
     model_path = hf_hub_download(
         repo_id=REPO_ID,
-        filename="bert_embedding.pt"
+        filename="best_model.pt"
     )
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")

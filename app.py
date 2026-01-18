@@ -34,6 +34,7 @@ def load_assets():
     # Dataset sesuai Tabel 4.1 
     with st.spinner:
         csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
+        df = pd.read_csv(csv_path)
         # Download model (Fine-tuned BERT)
         REPO_ID = "lattezice/cafe-sentiment-bert"
         try:

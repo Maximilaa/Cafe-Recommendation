@@ -111,29 +111,27 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC
+# RECOMMENDATION LOGIC (VERSI BERSIH)
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
         with st.spinner("Menganalisis preferensi..."):
-            # 1. Encode user preference
+            # 1. Encode user preference (BERT CLS Token)
             user_emb = encode_text(user_text).reshape(1, -1)
 
-            # 2. Similarity & Hybrid Scoring (Alpha 0.7)
+            # 2. Similarity & Hybrid Scoring (Alpha 0.7 sesuai cek.pdf)
             similarity_scores = cosine_similarity(user_emb, cafe_emb_matrix)[0]
             hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sentiment_score_vec)
 
-            # 3. Sinkronisasi & Filter Lokasi
+            # 3. Sinkronisasi Data
             result_df = df.drop_duplicates("business_id").copy()
-            
-            # Pastikan panjang data cocok (Force Match)
             min_len = min(len(result_df), len(hybrid_scores))
             result_df = result_df.iloc[:min_len].copy()
             result_df["hybrid_score"] = hybrid_scores[:min_len]
 
-            # Filter Kota & State
+            # 4. Filter Lokasi
             final_res = result_df[
                 (result_df["city"].str.lower() == city.lower()) &
                 (result_df["state"].str.lower() == state.lower())
@@ -142,19 +140,31 @@ if submitted:
             if final_res.empty:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # 4. Ranking & Formatting
+                # --- PERBAIKAN RATING & RANKING ---
                 final_res = final_res.sort_values("hybrid_score", ascending=False).head(TOP_N)
                 
-                # Tambahkan kolom Ranking (1-5)
+                # Membulatkan rating menjadi 1 angka di belakang koma (misal: 4.0)
+                final_res["cafe_rating"] = final_res["cafe_rating"].round(1)
+                
+                # Membulatkan hybrid_score menjadi 3 angka di belakang koma agar rapi
+                final_res["hybrid_score"] = final_res["hybrid_score"].round(3)
+                
+                # Menambahkan kolom Ranking (1-5)
                 final_res.insert(0, "Rank", range(1, 1 + len(final_res)))
 
-                # --- OUTPUT UTAMA (Hanya panggil ini satu kali) ---
+                # --- OUTPUT TUNGGAL ---
                 st.subheader("🎯 Hasil Rekomendasi Terbaik")
                 
-                # Tampilkan kolom sesuai permintaan UI/UX kamu
+                # Kolom yang ditampilkan sesuai permintaan UI/UX
                 display_cols = ["Rank", "cafe_name", "cafe_rating", "city", "state", "hybrid_score"]
                 
-                # Menggunakan st.table agar tampilan ranking lebih tegas/statis
-                st.table(final_res[display_cols].reset_index(drop=True))
+                # Mengganti nama kolom agar lebih rapi di tampilan
+                final_res.columns = ["Rank", "Nama Café", "Rating", "Kota", "State", "Match Score"]
                 
-                st.success(f"Berhasil menemukan {len(final_res)} café yang paling cocok!")
+                # Tampilkan hanya satu tabel di sini
+                st.table(final_res.reset_index(drop=True))
+                
+                st.success(f"Berhasil menemukan café yang paling cocok dengan preferensi Anda!")
+
+# PENTING: Pastikan setelah baris ini (di luar blok 'if submitted') 
+# TIDAK ADA lagi perintah st.write(df) atau st.table(df).

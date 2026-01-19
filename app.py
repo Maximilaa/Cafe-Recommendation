@@ -175,5 +175,3 @@ if submitted:
                 st.subheader("🎯 Hasil Rekomendasi Terbaik")
                 st.table(df_display.reset_index(drop=True))
                 st.success("Logika perhitungan dan tampilan sekarang sudah sinkron dengan Colab.")
-
-# PENGAMAN: Cek baris paling bawah, HAPUS jika ada st.write(df) atau st.table(df) di sana.

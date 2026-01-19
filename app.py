@@ -111,27 +111,34 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC (FIXED FORMATTING)
+# RECOMMENDATION LOGIC (MATCHED WITH COLAB)
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
-        with st.spinner("Menganalisis preferensi..."):
+        with st.spinner("Menganalisis preferensi & menyelaraskan skor..."):
             # 1. Encode user preference
             user_emb = encode_text(user_text).reshape(1, -1)
 
-            # 2. Similarity & Hybrid Scoring
+            # 2. Semantic Similarity
             similarity_scores = cosine_similarity(user_emb, cafe_emb_matrix)[0]
-            hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sentiment_score_vec)
 
-            # 3. Sinkronisasi Data
+            # 3. NORMALISASI SENTIMEN (Langkah yang tertinggal)
+            # Mengubah rentang [-1, 1] menjadi [0, 1] sesuai script Colab kamu
+            sent_norm = (sentiment_score_vec + 1) / 2
+
+            # 4. HYBRID SCORING (Sama persis dengan Colab)
+            # Hybrid = 0.7 * sim_sem + 0.3 * sent_norm
+            hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sent_norm)
+
+            # 5. Sinkronisasi Data & Ranking
             result_df = df.drop_duplicates("business_id").copy()
             min_len = min(len(result_df), len(hybrid_scores))
             result_df = result_df.iloc[:min_len].copy()
             result_df["hybrid_score"] = hybrid_scores[:min_len]
 
-            # 4. Filter Lokasi
+            # 6. Filter Lokasi
             final_res = result_df[
                 (result_df["city"].str.lower() == city.lower()) &
                 (result_df["state"].str.lower() == state.lower())
@@ -140,25 +147,27 @@ if submitted:
             if final_res.empty:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # --- FORMATTING & RANKING ---
+                # --- FORMATTING & OUTPUT ---
                 final_res = final_res.sort_values("hybrid_score", ascending=False).head(TOP_N)
                 
-                # Tambahkan kolom Rank (1-5)
+                # Tambahkan Ranking
                 final_res.insert(0, "Rank", range(1, 1 + len(final_res)))
-                
-                # PILIH KOLOM & FORMAT ANGKA MENJADI STRING (Agar Nol Hilang)
-                # .map("{:.1f}".format) memaksa hanya 1 angka di belakang koma
-                final_res["Cafe Rating"] = final_res["cafe_rating"].map("{:.1f}".format)
-                final_res["Match Score"] = final_res["hybrid_score"].map("{:.3f}".format)
-                
-                # Pilih kolom yang ingin ditampilkan saja
-                display_df = final_res[["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]]
 
-                # GANTI NAMA KOLOM UNTUK UI
+                # FORMAT RATING & SCORE (Force string agar nol hilang)
+                # Menggunakan .apply untuk memastikan angka berlebih hilang
+                final_res["Cafe Rating"] = final_res["cafe_rating"].apply(lambda x: f"{float(x):.1f}")
+                final_res["Match Score"] = final_res["hybrid_score"].apply(lambda x: f"{float(x):.3f}")
+
+                # Pilih kolom untuk ditampilkan
+                display_df = final_res[["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]]
                 display_df.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
 
-                # --- OUTPUT TUNGGAL (Hanya ada di dalam blok IF) ---
-                st.subheader("🎯 Hasil Rekomendasi Terbaik")
+                # --- OUTPUT TUNGGAL ---
+                st.subheader("🎯 Hasil Rekomendasi Terbaik (Sesuai Colab)")
                 st.table(display_df.reset_index(drop=True))
                 
-                st.success(f"Berhasil menemukan {len(display_df)} café yang paling cocok!")
+                st.success(f"Analisis selesai! Hasil di atas sudah menggunakan normalisasi sentimen.")
+
+# =========================================================================
+# PENGAMAN: HAPUS SEMUA BARIS DI BAWAH INI JIKA ADA st.write atau st.table
+# =========================================================================

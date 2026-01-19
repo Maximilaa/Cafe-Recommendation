@@ -37,7 +37,7 @@ def load_assets():
         csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
         df = pd.read_csv(csv_path)
 
-        model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
+        model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
         emb_path = hf_hub_download(repo_id=REPO_ID, filename="cafe_embedding.npy")
         sent_path = hf_hub_download(repo_id=REPO_ID, filename="sentiment_score.npy")
         

@@ -146,6 +146,12 @@ if submitted:
                 df_display = df_filtered[display_cols].copy()
                 df_display.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
 
-                # --- OUTPUT TUNGGAL ---
-                st.subheader("🎯 Hasil Rekomendasi")
-                st.table(df_display.reset_index(drop=True))
+               # --- OUTPUT TUNGGAL (DIPERBARUI) ---
+                st.subheader("🎯 Hasil Rekomendasi Terbaik")
+                
+                # Ganti st.table(...) dengan st.dataframe dan tambahkan hide_index=True
+                st.dataframe(
+                    df_display, 
+                    hide_index=True, 
+                    use_container_width=True
+                )

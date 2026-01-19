@@ -111,59 +111,66 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC (MATCHED WITH COLAB)
+# RECOMMENDATION LOGIC (MIRRORING COLAB)
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
-        with st.spinner("Menganalisis preferensi & menyelaraskan skor..."):
-            # 1. Encode user preference
-            user_emb = encode_text(user_text).reshape(1, -1)
+        with st.spinner("Menghitung rekomendasi sesuai algoritma Colab..."):
+            # --- 1) PERSYARATAN DATA UNIK ---
+            # Pastikan dataframe hanya berisi kafe unik agar sinkron dengan baris matrix .npy
+            df_unique = df.drop_duplicates("business_id").reset_index(drop=True)
 
-            # 2. Semantic Similarity
-            similarity_scores = cosine_similarity(user_emb, cafe_emb_matrix)[0]
+            # --- 2) FILTER LOKASI (Persis Langkah 1 di Colab) ---
+            # Membuat 'mask' untuk menyaring baris mana saja yang sesuai kota & state
+            mask = (df_unique['city'].str.lower() == city.lower()) & \
+                   (df_unique['state'].str.lower() == state.lower())
 
-            # 3. NORMALISASI SENTIMEN (Langkah yang tertinggal)
-            # Mengubah rentang [-1, 1] menjadi [0, 1] sesuai script Colab kamu
-            sent_norm = (sentiment_score_vec + 1) / 2
-
-            # 4. HYBRID SCORING (Sama persis dengan Colab)
-            # Hybrid = 0.7 * sim_sem + 0.3 * sent_norm
-            hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sent_norm)
-
-            # 5. Sinkronisasi Data & Ranking
-            result_df = df.drop_duplicates("business_id").copy()
-            min_len = min(len(result_df), len(hybrid_scores))
-            result_df = result_df.iloc[:min_len].copy()
-            result_df["hybrid_score"] = hybrid_scores[:min_len]
-
-            # 6. Filter Lokasi
-            final_res = result_df[
-                (result_df["city"].str.lower() == city.lower()) &
-                (result_df["state"].str.lower() == state.lower())
-            ].copy()
-
-            if final_res.empty:
+            if not mask.any():
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # --- FORMATTING & OUTPUT ---
-                final_res = final_res.sort_values("hybrid_score", ascending=False).head(TOP_N)
-                
+                # --- 3) SLICING ASSETS (Langkah Filter Matrix di Colab) ---
+                # Hanya mengambil bagian matrix yang lolos filter lokasi
+                emb_filtered = cafe_emb_matrix[mask]
+                sent_filtered = sentiment_score_vec[mask]
+                df_filtered = df_unique[mask].copy()
+
+                # --- 4) EMBED INPUT USER ---
+                user_emb = encode_text(user_text).reshape(1, -1)
+
+                # --- 5) SEMANTIC SIMILARITY (Langkah 3 di Colab) ---
+                sim_sem = cosine_similarity(user_emb, emb_filtered)[0]
+
+                # --- 6) HYBRID SCORING (Langkah 4 di Colab) ---
+                # Normalisasi sentimen: (x + 1) / 2
+                sent_norm = (sent_filtered + 1) / 2
+                # Rumus Hybrid: 0.7 * Sim + 0.3 * Sent_Norm
+                hybrid_score = (0.7 * sim_sem) + (0.3 * sent_norm)
+
+                # --- 7) RANKING & FORMATTING (Langkah 5 di Colab) ---
+                df_filtered["hybrid_score"] = hybrid_score
+                df_filtered = df_filtered.sort_values("hybrid_score", ascending=False).head(TOP_N)
+
                 # Tambahkan Ranking
-                final_res.insert(0, "Rank", range(1, 1 + len(final_res)))
+                df_filtered.insert(0, "Rank", range(1, 1 + len(df_filtered)))
 
-                # FORMAT RATING & SCORE (Force string agar nol hilang)
-                # Menggunakan .apply untuk memastikan angka berlebih hilang
-                final_res["Cafe Rating"] = final_res["cafe_rating"].apply(lambda x: f"{float(x):.1f}")
-                final_res["Match Score"] = final_res["hybrid_score"].apply(lambda x: f"{float(x):.3f}")
+                # --- PERBAIKAN TAMPILAN RATING (Hapus Angka Nol Berlebih) ---
+                # Mengubah ke string agar Streamlit tidak menambah presisi float
+                df_filtered["Cafe Rating"] = df_filtered["cafe_rating"].apply(lambda x: f"{float(x):.1f}")
+                df_filtered["Match Score"] = df_filtered["hybrid_score"].apply(lambda x: f"{float(x):.3f}")
 
-                # Pilih kolom untuk ditampilkan
-                display_df = final_res[["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]]
-                display_df.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
+                # Pilih kolom akhir sesuai permintaan UI/UX
+                display_cols = ["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]
+                df_display = df_filtered[display_cols]
+                df_display.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
 
                 # --- OUTPUT TUNGGAL ---
-                st.subheader("🎯 Hasil Rekomendasi Terbaik (Sesuai Colab)")
+                st.subheader("🎯 Hasil Rekomendasi (Sinkron dengan Colab)")
+                st.table(df_display.reset_index(drop=True))
+                st.success("Berhasil! Logika perhitungan sekarang sudah identik dengan notebook Colab Anda.")
+
+
                 st.table(display_df.reset_index(drop=True))
                 
                 st.success(f"Analisis selesai! Hasil di atas sudah menggunakan normalisasi sentimen.")

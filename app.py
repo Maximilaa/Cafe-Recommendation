@@ -111,39 +111,47 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC
+# RECOMMENDATION LOGIC (FIXED)
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
         with st.spinner("Menganalisis preferensi..."):
+            # 1. Encode user preference
             user_emb = encode_text(user_text).reshape(1, -1)
 
-            # Similarity & Hybrid Scoring [cite: 919, 921]
+            # 2. Perhitungan Cosine Similarity
+            # Pastikan cafe_emb_matrix memiliki jumlah baris yang sama dengan kafe unik
             similarity_scores = cosine_similarity(user_emb, cafe_emb_matrix)[0]
+
+            # 3. Perhitungan Hybrid Score (Sesuai Bab IV: Alpha 0.7)
             hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sentiment_score_vec)
 
-            result_df = df.copy()
+            # --- PERBAIKAN DI SINI ---
+            # Buat dataframe yang hanya berisi kafe unik agar jumlah barisnya cocok (Match Length)
+            # Pastikan urutan drop_duplicates sesuai dengan urutan saat membuat cafe_emb_matrix di Colab
+            result_df = df.drop_duplicates("business_id").copy()
+            
+            # Sekarang jumlah baris result_df pasti sama dengan hybrid_scores
             result_df["hybrid_score"] = hybrid_scores
+            result_df["similarity_score"] = similarity_scores
+            # -------------------------
 
-            # Filter Lokasi [cite: 929]
+            # 4. Filter Lokasi
             result_df = result_df[
-                (result_df["city"] == city) &
-                (result_df["state"] == state)
+                (result_df["city"].str.lower() == city.lower()) &
+                (result_df["state"].str.lower() == state.lower())
             ]
 
             if result_df.empty:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # Ranking [cite: 921, 922]
-                result_df = (
-                    result_df
-                    .sort_values("hybrid_score", ascending=False)
-                    .drop_duplicates("business_id")
-                    .head(TOP_N)
-                )
-
+                # 5. Ranking & Output
+                result_df = result_df.sort_values("hybrid_score", ascending=False).head(TOP_N)
+                
                 st.subheader("🎯 Rekomendasi Café")
-                display_cols = ["cafe_name", "categories", "cafe_rating", "hybrid_score"]
+                display_cols = ["cafe_name", "cafe_rating", "city", "state", "hybrid_score"]
+                
+                # Menampilkan tabel hasil final sesuai Tabel 4.11
                 st.dataframe(result_df[display_cols].reset_index(drop=True), use_container_width=True)

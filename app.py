@@ -55,7 +55,7 @@ def load_assets():
 
     # 4. Inisialisasi Model Klasifikasi (3 label: Positif, Netral, Negatif) [cite: 801, 816]
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3) [cite: 816, 831]
+    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") [cite: 544, 545]
     

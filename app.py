@@ -167,7 +167,3 @@ if submitted:
                 st.table(display_df.reset_index(drop=True))
                 
                 st.success(f"Analisis selesai! Hasil di atas sudah menggunakan normalisasi sentimen.")
-
-# =========================================================================
-# PENGAMAN: HAPUS SEMUA BARIS DI BAWAH INI JIKA ADA st.write atau st.table
-# =========================================================================

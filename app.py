@@ -111,65 +111,60 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC (FIXED INDEXING)
+# RECOMMENDATION LOGIC (FIXED SYNTAX)
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
         with st.spinner("Menghitung rekomendasi sesuai algoritma Colab..."):
-            # 1. Pastikan Data Unik (Satu baris per business_id)
+            # 1. Pastikan Data Unik
             df_unique = df.drop_duplicates("business_id").reset_index(drop=True)
 
-            # 2. Sinkronisasi Panjang Data (Pencegahan Error)
-            # Pastikan dataframe unik dan matrix npy punya jumlah baris yang sama
+            # 2. Sinkronisasi Panjang Data
             min_len = min(len(df_unique), len(cafe_emb_matrix))
             df_unique = df_unique.iloc[:min_len].copy()
             matrix_subset = cafe_emb_matrix[:min_len]
             sent_vec_subset = sentiment_score_vec[:min_len]
 
-            # 3. FILTER LOKASI (Mendapatkan Indeks Angka)
-            # Membuat mask boolean
+            # 3. Filter Lokasi (Gunakan Index Angka agar NumPy tidak Error)
             mask = (df_unique['city'].str.lower() == city.lower()) & \
                    (df_unique['state'].str.lower() == state.lower())
-            
-            # Mengubah mask boolean menjadi daftar indeks angka (0, 1, 2...)
             indices = np.where(mask)[0]
 
             if len(indices) == 0:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # 4. SLICING MENGGUNAKAN INDEKS (Persis langkah di Colab)
+                # 4. Slicing Sesuai Filter Lokasi
                 emb_filtered = matrix_subset[indices]
                 sent_filtered = sent_vec_subset[indices]
                 df_filtered = df_unique.iloc[indices].copy()
 
-                # 5. EMBED INPUT USER
+                # 5. Embed Input User
                 user_emb = encode_text(user_text).reshape(1, -1)
 
-                # 6. SEMANTIC SIMILARITY
+                # 6. Semantic Similarity & Normalisasi Sentimen
                 sim_sem = cosine_similarity(user_emb, emb_filtered)[0]
+                sent_norm = (sent_filtered + 1) / 2 # Normalisasi [-1, 1] ke [0, 1]
 
-                # 7. HYBRID SCORING (Sama Persis dengan Colab)
-                sent_norm = (sent_filtered + 1) / 2
+                # 7. Hybrid Scoring (Alpha 0.7 Sesuai Bab IV)
                 hybrid_score = (0.7 * sim_sem) + (0.3 * sent_norm)
 
-                # 8. RANKING & FORMATTING
+                # 8. Ranking & Formating
                 df_filtered["hybrid_score"] = hybrid_score
                 df_filtered = df_filtered.sort_values("hybrid_score", ascending=False).head(TOP_N)
 
                 # Tambahkan Ranking
                 df_filtered.insert(0, "Rank", range(1, 1 + len(df_filtered)))
 
-                # --- FIX RATING: Hapus Angka Nol (Force String Format) ---
-                # Menggunakan map dengan format float precision agar '4.0000' jadi '4.0'
-                df_filtered["Cafe Rating"] = df_filtered["cafe_rating"].map(lambda x: "{:.1f}".format(float(x)))
+                # --- FIX RATING & SCORE (Force String agar angka nol hilang) ---
+                df_filtered["Rating ⭐"] = df_filtered["cafe_rating"].map(lambda x: "{:.1f}".format(float(x)))
                 df_filtered["Match Score"] = df_filtered["hybrid_score"].map(lambda x: "{:.3f}".format(float(x)))
 
-                # Pilih kolom untuk ditampilkan
-                display_cols = ["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]
+                # 9. Pemilihan Kolom & Ganti Nama (FIX TYPO)
+                display_cols = ["Rank", "cafe_name", "Rating ⭐", "city", "state", "Match Score"]
                 df_display = df_filtered[display_cols].copy()
-                df_display.columns = ["Rank", "Nama Café", "Cafe Rating "Kota", "State", "Match Score"]
+                df_display.columns = ["Rank", "Nama Café", "Rating ⭐", "Kota", "State", "Match Score"]
 
                 # --- OUTPUT TUNGGAL ---
                 st.subheader("🎯 Hasil Rekomendasi Terbaik")

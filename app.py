@@ -145,3 +145,7 @@ if submitted:
                 display_cols = ["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]
                 df_display = df_filtered[display_cols].copy()
                 df_display.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
+
+                # --- OUTPUT TUNGGAL ---
+                st.subheader("🎯 Hasil Rekomendasi")
+                st.table(df_display.reset_index(drop=True))

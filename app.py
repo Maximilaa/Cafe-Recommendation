@@ -155,7 +155,7 @@ if submitted:
                 final_res["hybrid_score"] = final_res["hybrid_score"].round(3) # Jadi 3 angka blkg koma
 
                 # GANTI NAMA KOLOM (Sekarang jumlahnya pasti 6)
-                final_res.columns = ["Rank", "Nama Café", "Rating ⭐", "Kota", "State", "Match Score"]
+                final_res.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
 
                 # --- OUTPUT TUNGGAL ---
                 st.subheader("🎯 Hasil Rekomendasi Terbaik")

@@ -21,8 +21,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Parameter sesuai Bab IV penelitian [cite: 754, 788, 828, 919]
-ALPHA = 0.7   # Bobot hybrid [cite: 919, 938]
+# Parameter sesuai Bab IV penelitian [cite: 585, 920]
+ALPHA = 0.7   
 TOP_N = 5
 MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 [cite: 754, 788, 828]
 
@@ -31,35 +31,32 @@ MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 [cite: 754, 788, 828]
 # =========================
 @st.cache_resource
 def load_assets():
-    # Definisikan REPO_ID di awal agar bisa dipanggil [cite: 559]
     REPO_ID = "lattezice/cafe-sentimen-bert"
     
-    # Perbaikan: Tambahkan () pada st.spinner dan perbaiki urutan download
     with st.spinner("Mengunduh aset dari Hugging Face..."):
-        # 1. Download Dataset sesuai Tabel 4.1 [cite: 582, 587]
+        # 1. Download Dataset
         csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
         df = pd.read_csv(csv_path)
 
-        # 2. Download model (Fine-tuned BERT) [cite: 816, 831]
+        # 2. Download model
         try:
             model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
         except:
             model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
 
-        # 3. Download precomputed assets (.npy) dari Hugging Face [cite: 500, 863]
+        # 3. Download precomputed assets (.npy)
         emb_path = hf_hub_download(repo_id=REPO_ID, filename="cafe_embedding.npy")
         sent_path = hf_hub_download(repo_id=REPO_ID, filename="sentiment_score.npy")
         
         cafe_emb = np.load(emb_path)      
         sentiment_score = np.load(sent_path)
 
-    # 4. Inisialisasi Model Klasifikasi (3 label: Positif, Netral, Negatif) [cite: 801, 816]
+    # Inisialisasi Model (3 label: 0=Positif, 1=Netral, 2=Negatif) [cite: 801, 816]
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") [cite: 544, 545]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Load state dict
     state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)
@@ -78,7 +75,6 @@ except Exception as e:
 # HELPER FUNCTION
 # =========================
 def encode_text(text):
-    # Tokenisasi sesuai Bab 4.4.1 [cite: 828]
     inputs = tokenizer(
         text,
         return_tensors="pt",
@@ -88,7 +84,6 @@ def encode_text(text):
     ).to(device)
 
     with torch.no_grad():
-        # Mengambil base bert dari classification model
         outputs = model.bert(**inputs) 
         # Mengambil [CLS] token sebagai representasi ulasan [cite: 499, 869]
         emb = outputs.last_hidden_state[:, 0, :]  
@@ -109,9 +104,9 @@ with st.form("recommender_form"):
 
     col1, col2 = st.columns(2)
     with col1:
-        city = st.selectbox("City", sorted(df["city"].dropna().unique())) [cite: 582, 586]
+        city = st.selectbox("City", sorted(df["city"].dropna().unique()))
     with col2:
-        state = st.selectbox("State", sorted(df["state"].dropna().unique())) [cite: 582, 586]
+        state = st.selectbox("State", sorted(df["state"].dropna().unique()))
 
     submitted = st.form_submit_button("Cari Rekomendasi")
 
@@ -123,29 +118,16 @@ if submitted:
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
         with st.spinner("Menganalisis preferensi..."):
-            # 1. Encode user preference [cite: 512, 917]
             user_emb = encode_text(user_text).reshape(1, -1)
 
-            # 2. Perhitungan Cosine Similarity [cite: 272, 511, 906]
-            similarity_scores = cosine_similarity(
-                user_emb,
-                cafe_emb_matrix
-            )[0]
+            # Similarity & Hybrid Scoring [cite: 919, 921]
+            similarity_scores = cosine_similarity(user_emb, cafe_emb_matrix)[0]
+            hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sentiment_score_vec)
 
-            # 3. Perhitungan Hybrid Score (Linear Combination) [cite: 919]
-            # Hybrid Score = (ALPHA * Semantic) + ((1 - ALPHA) * Sentiment)
-            hybrid_scores = (
-                ALPHA * similarity_scores
-                + (1 - ALPHA) * sentiment_score_vec
-            )
-
-            # 4. Integrasi ke DataFrame
             result_df = df.copy()
-            result_df["semantic_similarity"] = similarity_scores
-            result_df["sentiment_score"] = sentiment_score_vec
             result_df["hybrid_score"] = hybrid_scores
 
-            # 5. Filter Lokasi [cite: 929]
+            # Filter Lokasi [cite: 929]
             result_df = result_df[
                 (result_df["city"] == city) &
                 (result_df["state"] == state)
@@ -154,7 +136,7 @@ if submitted:
             if result_df.empty:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # 6. Ranking berdasarkan Hybrid Score [cite: 921, 922]
+                # Ranking [cite: 921, 922]
                 result_df = (
                     result_df
                     .sort_values("hybrid_score", ascending=False)
@@ -162,11 +144,6 @@ if submitted:
                     .head(TOP_N)
                 )
 
-                # Output UI sesuai Tabel 4.11 [cite: 931, 934]
                 st.subheader("🎯 Rekomendasi Café")
                 display_cols = ["cafe_name", "categories", "cafe_rating", "hybrid_score"]
-                
-                st.dataframe(
-                    result_df[display_cols].reset_index(drop=True),
-                    use_container_width=True
-                )
+                st.dataframe(result_df[display_cols].reset_index(drop=True), use_container_width=True)

@@ -111,47 +111,60 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC (FIXED)
+# RECOMMENDATION LOGIC (FORCE MATCH VERSION)
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
         with st.spinner("Menganalisis preferensi..."):
-            # 1. Encode user preference
+            # 1. Encode user preference (BERT CLS Token)
             user_emb = encode_text(user_text).reshape(1, -1)
 
-            # 2. Perhitungan Cosine Similarity
-            # Pastikan cafe_emb_matrix memiliki jumlah baris yang sama dengan kafe unik
+            # 2. Hitung Similarity & Hybrid Score
             similarity_scores = cosine_similarity(user_emb, cafe_emb_matrix)[0]
-
-            # 3. Perhitungan Hybrid Score (Sesuai Bab IV: Alpha 0.7)
+            
+            # Hybrid Score = (0.7 * Semantic) + (0.3 * Sentiment)
             hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sentiment_score_vec)
 
-            # --- PERBAIKAN DI SINI ---
-            # Buat dataframe yang hanya berisi kafe unik agar jumlah barisnya cocok (Match Length)
-            # Pastikan urutan drop_duplicates sesuai dengan urutan saat membuat cafe_emb_matrix di Colab
+            # 3. Sinkronisasi Data (PENTING)
+            # Ambil kafe unik dari CSV
             result_df = df.drop_duplicates("business_id").copy()
             
-            # Sekarang jumlah baris result_df pasti sama dengan hybrid_scores
+            # Cek jika ada perbedaan jumlah antara matrix .npy dan baris .csv
+            n_matrix = len(hybrid_scores)
+            n_df = len(result_df)
+
+            if n_matrix != n_df:
+                # Jika tidak sama, kita ambil jumlah terkecil agar tidak Error Length Mismatch
+                min_len = min(n_matrix, n_df)
+                result_df = result_df.iloc[:min_len].copy()
+                hybrid_scores = hybrid_scores[:min_len]
+                similarity_scores = similarity_scores[:min_len]
+
+            # Masukkan score ke dataframe
             result_df["hybrid_score"] = hybrid_scores
             result_df["similarity_score"] = similarity_scores
-            # -------------------------
 
-            # 4. Filter Lokasi
-            result_df = result_df[
-                (result_df["city"].str.lower() == city.lower()) &
+            # 4. Filter Lokasi (Dilakukan SETELAH skor dimasukkan)
+            # Pastikan kolom city dan state sesuai dengan input selectbox
+            final_res = result_df[
+                (result_df["city"].str.lower() == city.lower()) & 
                 (result_df["state"].str.lower() == state.lower())
-            ]
+            ].copy()
 
-            if result_df.empty:
+            if final_res.empty:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
+                # Opsional: Tampilkan info debug jika error berlanjut
+                # st.write(f"Debug: Total Cafe di Dataset: {len(result_df)}")
             else:
-                # 5. Ranking & Output
-                result_df = result_df.sort_values("hybrid_score", ascending=False).head(TOP_N)
+                # 5. Ranking & Tampilkan Hasil
+                final_res = final_res.sort_values("hybrid_score", ascending=False).head(TOP_N)
                 
                 st.subheader("🎯 Rekomendasi Café")
+                # Menampilkan kolom sesuai permintaan: Nama, Rating, Kota, State
                 display_cols = ["cafe_name", "cafe_rating", "city", "state", "hybrid_score"]
                 
-                # Menampilkan tabel hasil final sesuai Tabel 4.11
+                st.table(final_res[display_cols].reset_index(drop=True))
+                st.success(f"Ditemukan {len(final_res)} café terbaik untuk Anda!")
                 st.dataframe(result_df[display_cols].reset_index(drop=True), use_container_width=True)

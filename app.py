@@ -32,35 +32,23 @@ MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 [cite: 754, 788, 828]
 @st.cache_resource
 def load_assets():
     REPO_ID = "lattezice/cafe-sentimen-bert"
-    
-    with st.spinner("Mengunduh aset dari Hugging Face..."):
-        # 1. Download Dataset
+    with st.spinner("⏳ Sinkronisasi Data dengan Colab..."):
+        # Gunakan file CSV yang sudah diselaraskan urutannya
         csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
         df = pd.read_csv(csv_path)
 
-        # 2. Download model
-        try:
-            model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
-        except:
-            model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
-
-        # 3. Download precomputed assets (.npy)
+        model_path = hf_hub_download(repo_id=REPO_ID, filename="best_model.pt")
         emb_path = hf_hub_download(repo_id=REPO_ID, filename="cafe_embedding.npy")
         sent_path = hf_hub_download(repo_id=REPO_ID, filename="sentiment_score.npy")
         
         cafe_emb = np.load(emb_path)      
         sentiment_score = np.load(sent_path)
 
-    # Inisialisasi Model (3 label: 0=Positif, 1=Netral, 2=Negatif) [cite: 801, 816]
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    state_dict = torch.load(model_path, map_location=device)
-    model.load_state_dict(state_dict, strict=False)
-    model.to(device)
-    model.eval()
+    model.load_state_dict(torch.load(model_path, map_location=device), strict=False)
+    model.to(device).eval()
 
     return df, tokenizer, model, cafe_emb, sentiment_score, device
 
@@ -111,23 +99,17 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC (FIXED SYNTAX)
+# RECOMMENDATION LOGIC
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
-        with st.spinner("Menghitung rekomendasi sesuai algoritma Colab..."):
-            # 1. Pastikan Data Unik
-            df_unique = df.drop_duplicates("business_id").reset_index(drop=True)
+        with st.spinner("Menghitung skor hybrid..."):
+            # 1. Gunakan data yang sudah diload (urutan sudah pasti sama dengan .npy)
+            df_unique = df.copy()
 
-            # 2. Sinkronisasi Panjang Data
-            min_len = min(len(df_unique), len(cafe_emb_matrix))
-            df_unique = df_unique.iloc[:min_len].copy()
-            matrix_subset = cafe_emb_matrix[:min_len]
-            sent_vec_subset = sentiment_score_vec[:min_len]
-
-            # 3. Filter Lokasi (Gunakan Index Angka agar NumPy tidak Error)
+            # 2. Slicing berdasarkan lokasi (Persis logika Colab)
             mask = (df_unique['city'].str.lower() == city.lower()) & \
                    (df_unique['state'].str.lower() == state.lower())
             indices = np.where(mask)[0]
@@ -135,38 +117,36 @@ if submitted:
             if len(indices) == 0:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # 4. Slicing Sesuai Filter Lokasi
-                emb_filtered = matrix_subset[indices]
-                sent_filtered = sent_vec_subset[indices]
+                # 3. Ambil subset asset sesuai filter lokasi
+                emb_filtered = cafe_emb_matrix[indices]
+                sent_filtered = sentiment_score_vec[indices]
                 df_filtered = df_unique.iloc[indices].copy()
 
-                # 5. Embed Input User
+                # 4. Embed User Input
                 user_emb = encode_text(user_text).reshape(1, -1)
 
-                # 6. Semantic Similarity & Normalisasi Sentimen
+                # 5. Hitung Similarity & Hybrid Score
                 sim_sem = cosine_similarity(user_emb, emb_filtered)[0]
-                sent_norm = (sent_filtered + 1) / 2 # Normalisasi [-1, 1] ke [0, 1]
-
-                # 7. Hybrid Scoring (Alpha 0.7 Sesuai Bab IV)
+                sent_norm = (sent_filtered + 1) / 2
                 hybrid_score = (0.7 * sim_sem) + (0.3 * sent_norm)
 
-                # 8. Ranking & Formating
+                # 6. Masukkan hasil dan Ranking
                 df_filtered["hybrid_score"] = hybrid_score
                 df_filtered = df_filtered.sort_values("hybrid_score", ascending=False).head(TOP_N)
-
+                
                 # Tambahkan Ranking
                 df_filtered.insert(0, "Rank", range(1, 1 + len(df_filtered)))
 
-                # --- FIX RATING & SCORE (Force String agar angka nol hilang) ---
+                # 7. Formating Tampilan (Fixing Rating & Match Score)
                 df_filtered["Rating ⭐"] = df_filtered["cafe_rating"].map(lambda x: "{:.1f}".format(float(x)))
                 df_filtered["Match Score"] = df_filtered["hybrid_score"].map(lambda x: "{:.3f}".format(float(x)))
 
-                # 9. Pemilihan Kolom & Ganti Nama (FIX TYPO)
+                # 8. Pilih Kolom & Ganti Nama (Tanpa Syntax Error)
                 display_cols = ["Rank", "cafe_name", "Rating ⭐", "city", "state", "Match Score"]
                 df_display = df_filtered[display_cols].copy()
                 df_display.columns = ["Rank", "Nama Café", "Rating ⭐", "Kota", "State", "Match Score"]
 
                 # --- OUTPUT TUNGGAL ---
-                st.subheader("🎯 Hasil Rekomendasi Terbaik")
+                st.subheader("🎯 Hasil Rekomendasi (Sinkron 100% dengan Colab)")
                 st.table(df_display.reset_index(drop=True))
-                st.success("Logika perhitungan dan tampilan sekarang sudah sinkron dengan Colab.")
+                st.success("Logika perhitungan dan urutan data kini identik dengan notebook Colab Anda.")

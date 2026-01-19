@@ -111,60 +111,50 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC (FORCE MATCH VERSION)
+# RECOMMENDATION LOGIC
 # =========================
 if submitted:
     if user_text.strip() == "":
         st.warning("Masukkan preferensi café terlebih dahulu.")
     else:
         with st.spinner("Menganalisis preferensi..."):
-            # 1. Encode user preference (BERT CLS Token)
+            # 1. Encode user preference
             user_emb = encode_text(user_text).reshape(1, -1)
 
-            # 2. Hitung Similarity & Hybrid Score
+            # 2. Similarity & Hybrid Scoring (Alpha 0.7)
             similarity_scores = cosine_similarity(user_emb, cafe_emb_matrix)[0]
-            
-            # Hybrid Score = (0.7 * Semantic) + (0.3 * Sentiment)
             hybrid_scores = (ALPHA * similarity_scores) + ((1 - ALPHA) * sentiment_score_vec)
 
-            # 3. Sinkronisasi Data (PENTING)
-            # Ambil kafe unik dari CSV
+            # 3. Sinkronisasi & Filter Lokasi
             result_df = df.drop_duplicates("business_id").copy()
             
-            # Cek jika ada perbedaan jumlah antara matrix .npy dan baris .csv
-            n_matrix = len(hybrid_scores)
-            n_df = len(result_df)
+            # Pastikan panjang data cocok (Force Match)
+            min_len = min(len(result_df), len(hybrid_scores))
+            result_df = result_df.iloc[:min_len].copy()
+            result_df["hybrid_score"] = hybrid_scores[:min_len]
 
-            if n_matrix != n_df:
-                # Jika tidak sama, kita ambil jumlah terkecil agar tidak Error Length Mismatch
-                min_len = min(n_matrix, n_df)
-                result_df = result_df.iloc[:min_len].copy()
-                hybrid_scores = hybrid_scores[:min_len]
-                similarity_scores = similarity_scores[:min_len]
-
-            # Masukkan score ke dataframe
-            result_df["hybrid_score"] = hybrid_scores
-            result_df["similarity_score"] = similarity_scores
-
-            # 4. Filter Lokasi (Dilakukan SETELAH skor dimasukkan)
-            # Pastikan kolom city dan state sesuai dengan input selectbox
+            # Filter Kota & State
             final_res = result_df[
-                (result_df["city"].str.lower() == city.lower()) & 
+                (result_df["city"].str.lower() == city.lower()) &
                 (result_df["state"].str.lower() == state.lower())
             ].copy()
 
             if final_res.empty:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
-                # Opsional: Tampilkan info debug jika error berlanjut
-                # st.write(f"Debug: Total Cafe di Dataset: {len(result_df)}")
             else:
-                # 5. Ranking & Tampilkan Hasil
+                # 4. Ranking & Formatting
                 final_res = final_res.sort_values("hybrid_score", ascending=False).head(TOP_N)
                 
-                st.subheader("🎯 Rekomendasi Café")
-                # Menampilkan kolom sesuai permintaan: Nama, Rating, Kota, State
-                display_cols = ["cafe_name", "cafe_rating", "city", "state", "hybrid_score"]
+                # Tambahkan kolom Ranking (1-5)
+                final_res.insert(0, "Rank", range(1, 1 + len(final_res)))
+
+                # --- OUTPUT UTAMA (Hanya panggil ini satu kali) ---
+                st.subheader("🎯 Hasil Rekomendasi Terbaik")
                 
+                # Tampilkan kolom sesuai permintaan UI/UX kamu
+                display_cols = ["Rank", "cafe_name", "cafe_rating", "city", "state", "hybrid_score"]
+                
+                # Menggunakan st.table agar tampilan ranking lebih tegas/statis
                 st.table(final_res[display_cols].reset_index(drop=True))
-                st.success(f"Ditemukan {len(final_res)} café terbaik untuk Anda!")
-                st.dataframe(result_df[display_cols].reset_index(drop=True), use_container_width=True)
+                
+                st.success(f"Berhasil menemukan {len(final_res)} café yang paling cocok!")

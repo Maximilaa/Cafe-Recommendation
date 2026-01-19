@@ -138,15 +138,10 @@ if submitted:
                 df_filtered.insert(0, "Rank", range(1, 1 + len(df_filtered)))
 
                 # 7. Formating Tampilan (Fixing Rating & Match Score)
-                df_filtered["Rating ⭐"] = df_filtered["cafe_rating"].map(lambda x: "{:.1f}".format(float(x)))
+                df_filtered["Cafe Rating"] = df_filtered["cafe_rating"].map(lambda x: "{:.1f}".format(float(x)))
                 df_filtered["Match Score"] = df_filtered["hybrid_score"].map(lambda x: "{:.3f}".format(float(x)))
 
                 # 8. Pilih Kolom & Ganti Nama (Tanpa Syntax Error)
-                display_cols = ["Rank", "cafe_name", "Rating ⭐", "city", "state", "Match Score"]
+                display_cols = ["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]
                 df_display = df_filtered[display_cols].copy()
-                df_display.columns = ["Rank", "Nama Café", "Rating ⭐", "Kota", "State", "Match Score"]
-
-                # --- OUTPUT TUNGGAL ---
-                st.subheader("🎯 Hasil Rekomendasi (Sinkron 100% dengan Colab)")
-                st.table(df_display.reset_index(drop=True))
-                st.success("Logika perhitungan dan urutan data kini identik dengan notebook Colab Anda.")
+                df_display.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]

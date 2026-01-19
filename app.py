@@ -111,7 +111,7 @@ with st.form("recommender_form"):
     submitted = st.form_submit_button("Cari Rekomendasi")
 
 # =========================
-# RECOMMENDATION LOGIC (VERSI FIX COLUMN)
+# RECOMMENDATION LOGIC (FIXED FORMATTING)
 # =========================
 if submitted:
     if user_text.strip() == "":
@@ -140,25 +140,25 @@ if submitted:
             if final_res.empty:
                 st.error(f"Tidak ada café ditemukan di {city}, {state}.")
             else:
-                # --- PERBAIKAN RATING & RANKING ---
+                # --- FORMATTING & RANKING ---
                 final_res = final_res.sort_values("hybrid_score", ascending=False).head(TOP_N)
                 
                 # Tambahkan kolom Rank (1-5)
                 final_res.insert(0, "Rank", range(1, 1 + len(final_res)))
                 
-                # PEMILIHAN KOLOM (Wajib dilakukan sebelum ganti nama agar jumlahnya pas 6)
-                # Sesuai permintaan: Rank, Nama, Rating, City, State, Score
-                final_res = final_res[["Rank", "cafe_name", "cafe_rating", "city", "state", "hybrid_score"]]
-
-                # PEMBULATAN ANGKA agar tidak banyak angka 0 (Sesuai masukan kamu)
-                final_res["cafe_rating"] = final_res["cafe_rating"].round(1) # Jadi 1 angka blkg koma
-                final_res["hybrid_score"] = final_res["hybrid_score"].round(3) # Jadi 3 angka blkg koma
-
-                # GANTI NAMA KOLOM (Sekarang jumlahnya pasti 6)
-                final_res.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
-
-                # --- OUTPUT TUNGGAL ---
-                st.subheader("🎯 Hasil Rekomendasi Terbaik")
-                st.table(final_res.reset_index(drop=True))
+                # PILIH KOLOM & FORMAT ANGKA MENJADI STRING (Agar Nol Hilang)
+                # .map("{:.1f}".format) memaksa hanya 1 angka di belakang koma
+                final_res["Cafe Rating"] = final_res["cafe_rating"].map("{:.1f}".format)
+                final_res["Match Score"] = final_res["hybrid_score"].map("{:.3f}".format)
                 
-                st.success(f"Berhasil menemukan café yang paling cocok!")
+                # Pilih kolom yang ingin ditampilkan saja
+                display_df = final_res[["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]]
+
+                # GANTI NAMA KOLOM UNTUK UI
+                display_df.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
+
+                # --- OUTPUT TUNGGAL (Hanya ada di dalam blok IF) ---
+                st.subheader("🎯 Hasil Rekomendasi Terbaik")
+                st.table(display_df.reset_index(drop=True))
+                
+                st.success(f"Berhasil menemukan {len(display_df)} café yang paling cocok!")

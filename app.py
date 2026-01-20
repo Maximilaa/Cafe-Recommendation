@@ -41,6 +41,9 @@ def load_assets():
         csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
         df = pd.read_csv(csv_path)
 
+        # REVISION: Map "PA" to "Pennsylvania"
+        df['state'] = df['state'].replace('PA', 'Pennsylvania')
+
         model_path = hf_hub_download(repo_id=REPO_ID, filename="models/best_model.pt")
         emb_path = hf_hub_download(repo_id=REPO_ID, filename="cafe_embedding.npy")
         sent_path = hf_hub_download(repo_id=REPO_ID, filename="sentiment_score.npy")
@@ -104,6 +107,7 @@ with st.form("recommender_form"):
     with col1:
         city = st.selectbox("City", sorted(df["city"].dropna().unique()))
     with col2:
+        # This will now display "Pennsylvania"
         state = st.selectbox("State", sorted(df["state"].dropna().unique()))
 
     submitted = st.form_submit_button("Get Recommendations")
@@ -137,7 +141,8 @@ if submitted:
                 user_emb = encode_text(user_text).reshape(1, -1)
 
                 # Hybrid Score Calculation
-                # Formula: $$Score = (0.7 \times \text{Semantic}) + (0.3 \times \text{Sentiment\_norm})$$
+                # Formula: $Score = (0.7 \times \text{Semantic}) + (0.3 \times \text{Sentiment\_norm})$
+                # where $\text{Sentiment\_norm} = \frac{(\text{Sentiment Score} + 1)}{2}$
                 sim_sem = cosine_similarity(user_emb, emb_filtered)[0]
                 sent_norm = (sent_filtered + 1) / 2
                 hybrid_score = (ALPHA * sim_sem) + ((1 - ALPHA) * sent_norm)

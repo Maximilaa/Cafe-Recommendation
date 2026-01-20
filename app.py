@@ -95,7 +95,7 @@ def is_english(text):
 # UI (English Version)
 # =========================
 st.title("☕ Cafe Recommender System")
-st.markdown("A Hybrid Recommendation System based on Semantic Embedding & Sentiment Analysis")
+st.markdown("Recommendation System based on Semantic Embedding & Sentiment Analysis")
 
 with st.form("recommender_form"):
     user_text = st.text_area(

@@ -12,19 +12,23 @@ import numpy as np
 from transformers import BertTokenizer, BertForSequenceClassification
 from sklearn.metrics.pairwise import cosine_similarity
 from huggingface_hub import hf_hub_download
+from langdetect import detect, DetectorFactory
+
+# Ensure consistent language detection results
+DetectorFactory.seed = 0
 
 # =========================
 # CONFIG
 # =========================
 st.set_page_config(
-    page_title="Coffee Recommender",
+    page_title="Cafe Recommender System",
     layout="wide"
 )
 
-# Parameter sesuai Bab IV penelitian [cite: 585, 920]
+# Parameters as per Chapter IV
 ALPHA = 0.7   
 TOP_N = 5
-MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 [cite: 754, 788, 828]
+MAX_LEN = 320 # As per cek.pdf
 
 # =========================
 # LOAD ASSETS
@@ -32,8 +36,8 @@ MAX_LEN = 320 # Sesuai cek.pdf hal 40 & 42 [cite: 754, 788, 828]
 @st.cache_resource
 def load_assets():
     REPO_ID = "lattezice/cafe-sentimen-bert"
-    with st.spinner("⏳ Sinkronisasi Data dengan Colab..."):
-        # Gunakan file CSV yang sudah diselaraskan urutannya
+    with st.spinner("⏳ Synchronizing Data with Colab..."):
+        # Load aligned CSV
         csv_path = hf_hub_download(repo_id=REPO_ID, filename="processed_coffee.csv")
         df = pd.read_csv(csv_path)
 
@@ -52,15 +56,15 @@ def load_assets():
 
     return df, tokenizer, model, cafe_emb, sentiment_score, device
 
-# Eksekusi Load
+# Asset Execution
 try:
     df, tokenizer, model, cafe_emb_matrix, sentiment_score_vec, device = load_assets()
 except Exception as e:
-    st.error(f"Gagal memuat assets: {e}")
+    st.error(f"Failed to load assets: {e}")
     st.stop()
 
 # =========================
-# HELPER FUNCTION
+# HELPER FUNCTIONS
 # =========================
 def encode_text(text):
     inputs = tokenizer(
@@ -73,20 +77,26 @@ def encode_text(text):
 
     with torch.no_grad():
         outputs = model.bert(**inputs) 
-        # Mengambil [CLS] token sebagai representasi ulasan [cite: 499, 869]
+        # Extract [CLS] token for review representation
         emb = outputs.last_hidden_state[:, 0, :]  
 
     return emb.cpu().numpy().flatten()
 
+def is_english(text):
+    try:
+        return detect(text) == 'en'
+    except:
+        return False
+
 # =========================
-# UI
+# UI (English Version)
 # =========================
-st.title("☕ Coffee Recommender")
-st.markdown("Sistem Rekomendasi Café Berbasis Embedding & Sentimen")
+st.title("☕ Cafe Recommender System")
+st.markdown("A Hybrid Recommendation System based on Semantic Embedding & Sentiment Analysis")
 
 with st.form("recommender_form"):
     user_text = st.text_area(
-        "Preferensi Café (contoh: cozy quiet place for studying)",
+        "Cafe Preferences (Must be in English, e.g., 'cozy quiet place for studying')",
         height=120
     )
 
@@ -96,62 +106,64 @@ with st.form("recommender_form"):
     with col2:
         state = st.selectbox("State", sorted(df["state"].dropna().unique()))
 
-    submitted = st.form_submit_button("Cari Rekomendasi")
+    submitted = st.form_submit_button("Get Recommendations")
 
 # =========================
 # RECOMMENDATION LOGIC
 # =========================
 if submitted:
     if user_text.strip() == "":
-        st.warning("Masukkan preferensi café terlebih dahulu.")
+        st.warning("Please enter your cafe preferences first.")
+    elif not is_english(user_text):
+        st.error("❌ Invalid input: Please use English for your preferences.")
     else:
-        with st.spinner("Menghitung skor hybrid..."):
-            # 1. Gunakan data yang sudah diload (urutan sudah pasti sama dengan .npy)
+        with st.spinner("Calculating hybrid scores..."):
             df_unique = df.copy()
 
-            # 2. Slicing berdasarkan lokasi (Persis logika Colab)
+            # Location filtering logic
             mask = (df_unique['city'].str.lower() == city.lower()) & \
                    (df_unique['state'].str.lower() == state.lower())
             indices = np.where(mask)[0]
 
             if len(indices) == 0:
-                st.error(f"Tidak ada café ditemukan di {city}, {state}.")
+                st.error(f"No cafes found in {city}, {state}.")
             else:
-                # 3. Ambil subset asset sesuai filter lokasi
+                # Slicing assets
                 emb_filtered = cafe_emb_matrix[indices]
                 sent_filtered = sentiment_score_vec[indices]
                 df_filtered = df_unique.iloc[indices].copy()
 
-                # 4. Embed User Input
+                # User Preference Embedding
                 user_emb = encode_text(user_text).reshape(1, -1)
 
-                # 5. Hitung Similarity & Hybrid Score
+                # Hybrid Score Calculation
+                # Formula: $$Score = (0.7 \times \text{Semantic}) + (0.3 \times \text{Sentiment\_norm})$$
                 sim_sem = cosine_similarity(user_emb, emb_filtered)[0]
                 sent_norm = (sent_filtered + 1) / 2
-                hybrid_score = (0.7 * sim_sem) + (0.3 * sent_norm)
+                hybrid_score = (ALPHA * sim_sem) + ((1 - ALPHA) * sent_norm)
 
-                # 6. Masukkan hasil dan Ranking
+                # Ranking
                 df_filtered["hybrid_score"] = hybrid_score
                 df_filtered = df_filtered.sort_values("hybrid_score", ascending=False).head(TOP_N)
                 
-                # Tambahkan Ranking
                 df_filtered.insert(0, "Rank", range(1, 1 + len(df_filtered)))
 
-                # 7. Formating Tampilan (Fixing Rating & Match Score)
-                df_filtered["Cafe Rating"] = df_filtered["cafe_rating"].map(lambda x: "{:.1f}".format(float(x)))
+                # Formatting output
+                df_filtered["Rating"] = df_filtered["cafe_rating"].map(lambda x: "{:.1f}".format(float(x)))
                 df_filtered["Match Score"] = df_filtered["hybrid_score"].map(lambda x: "{:.3f}".format(float(x)))
 
-                # 8. Pilih Kolom & Ganti Nama (Tanpa Syntax Error)
-                display_cols = ["Rank", "cafe_name", "Cafe Rating", "city", "state", "Match Score"]
+                # Column Selection
+                display_cols = ["Rank", "cafe_name", "Rating", "city", "state", "Match Score"]
                 df_display = df_filtered[display_cols].copy()
-                df_display.columns = ["Rank", "Nama Café", "Cafe Rating", "Kota", "State", "Match Score"]
+                df_display.columns = ["Rank", "Cafe Name", "Rating", "City", "State", "Match Score"]
 
-               # --- OUTPUT TUNGGAL (DIPERBARUI) ---
-                st.subheader("🎯 Hasil Rekomendasi Terbaik")
+                st.subheader("🎯 Top Recommendations")
                 
-                # Ganti st.table(...) dengan st.dataframe dan tambahkan hide_index=True
+                # Display without index per request
                 st.dataframe(
                     df_display, 
                     hide_index=True, 
                     use_container_width=True
                 )
+                
+                st.success("Analysis complete!")

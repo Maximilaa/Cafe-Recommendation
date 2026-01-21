@@ -5,21 +5,21 @@ Proyek ini dikembangkan untuk **keperluan akademik, penelitian, dan portofolio**
 📂 Struktur Proyek
 📁 Repository GitHub – Cafe Recommendation
     Cafe-Recommendation/
-    /br│
-    *br*├── Coffee Recommender.ipynb        # Notebook utama pengolahan data & rekomendasi
-    *br*├── app.py                          # Aplikasi demo rekomendasi café
-    *br*├── requirements.txt                # Daftar library Python
-    *br*├── Streamlit App Record.webm       # Rekaman demo aplikasi Streamlit
+    │
+    ├── Coffee Recommender.ipynb        # Notebook utama pengolahan data & rekomendasi
+    ├── app.py                          # Aplikasi demo rekomendasi café
+    ├── requirements.txt                # Daftar library Python
+    ├── Streamlit App Record.webm       # Rekaman demo aplikasi Streamlit
     └── README.md                       # Dokumentasi proyek
 
 🤗 Repository Hugging Face – Model Sentimen
     cafe-sentimen-bert/
-    *br*│
-    *br*├── app.py                          # Demo penggunaan model sentimen
-    *br*├── cafe_embedding.npy              # Embedding café hasil pemrosesan
-    *br*├── processed_coffee.csv            # Dataset ulasan café yang telah diproses
-    *br*├── sentiment_score.npy             # Nilai sentiment score tiap café
-    *br*└── requirements.txt                # Dependency model
+    │
+    ├── app.py                          # Demo penggunaan model sentimen
+    ├── cafe_embedding.npy              # Embedding café hasil pemrosesan
+    ├── processed_coffee.csv            # Dataset ulasan café yang telah diproses
+    ├── sentiment_score.npy             # Nilai sentiment score tiap café
+    └── requirements.txt                # Dependency model
 
 🔗 Model tersedia di:
 (https://huggingface.co/lattezice/cafe-sentimen-bert)

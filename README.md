@@ -5,12 +5,12 @@ Proyek ini dikembangkan untuk **keperluan akademik, penelitian, dan portofolio**
 📂 Struktur Proyek
 📁 Repository GitHub – Cafe Recommendation
     Cafe-Recommendation/
-    *br*│
+    /br│
     *br*├── Coffee Recommender.ipynb        # Notebook utama pengolahan data & rekomendasi
     *br*├── app.py                          # Aplikasi demo rekomendasi café
     *br*├── requirements.txt                # Daftar library Python
     *br*├── Streamlit App Record.webm       # Rekaman demo aplikasi Streamlit
-    *br*└── README.md                       # Dokumentasi proyek
+    └── README.md                       # Dokumentasi proyek
 
 🤗 Repository Hugging Face – Model Sentimen
     cafe-sentimen-bert/
